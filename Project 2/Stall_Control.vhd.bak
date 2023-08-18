@@ -1,0 +1,49 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity Stall_Control is
+	port(stall_IF,stall_ID,stall_EX,stall_MA,stall_WB:in std_logic;
+    not_valid_all:in std_logic;
+    valid_IF,valid_ID,valid_EX,valid_MA,valid_WB:out std_logic;
+    forcestall_IF,forcestall_ID,forcestall_EX,forcestall_MA,forcestall_WB:out std_logic;
+    );
+end entity;
+
+architecture Stall_Control_arc of Stall_Control is
+begin
+	process (not_valid_all)
+    begin 
+        valid_IF <='0';
+        valid_ID <='0';
+    end process;
+
+	process (clk)
+    begin
+        if(rising_edge(clk)) then
+            if(rst = '1') then
+              
+            else
+                valid_IF <= '1';
+                valid_ID <= '1';
+                valid_EX <= '1';
+                valid_MA <= '1';
+                valid_WB <= '1';
+                forcestall_EX <= '0';
+                forcestall_ID <= '0';
+                forcestall_IF <= '0';
+                forcestall_MA <= '0';
+                forcestall_WB <= '0';
+            end if;
+        end if;
+    end process;
+	
+    process(stall_IF,stall_ID,stall_EX,stall_MA,stall_WB)
+    begin
+        forcestall_WB <= '0';
+        forcestall_MA <= stall_WB ;
+        forcestall_EX <= stall_WB or stall_MA;
+        forcestall_ID <= stall_WB or stall_MA or stall_EX ;
+        forcestall_IF <= stall_WB or stall_MA or stall_EX or stall_ID;
+    end process;
+end architecture;

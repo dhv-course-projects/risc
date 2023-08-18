@@ -1,0 +1,420 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.std_logic_unsigned.all;
+use ieee.numeric_std.all;
+
+entity Controller is
+	port(state: in std_logic_vector(4 downto 0);
+	opcode: in std_logic_vector(3 downto 0);
+	c, z: in std_logic;
+	cz: in std_logic_vector(1 downto 0);
+	ins_7to0:in std_logic_vector(7 downto 0);
+	Reg_ADD:in std_logic_vector(2 downto 0);
+	
+	AReg_write: out std_logic;
+	BReg_write: out std_logic;
+	IR_write: out std_logic;
+	MDR_write: out std_logic;
+	M_write: out std_logic;
+	ALUReg_write: out std_logic;
+	pc_write: out std_logic;
+	carry_write: out std_logic;
+	zero_write: out std_logic;
+	RF_write: out std_logic;
+
+	mux_before_RFD3_cs:out std_logic_vector(3 downto 0);
+	mux_before_RFA3_cs:out std_logic_vector(1 downto 0);
+	mux_before_RFA1_cs:out std_logic_vector(1 downto 0);
+	mux_before_RFA2_cs:out std_logic_vector(1 downto 0);
+	mux_before_MEMA1_cs:out std_logic_vector(1 downto 0);
+	mux_before_ALUB_cs:out std_logic_vector(2 downto 0);
+	mux_before_ALUA_cs:out std_logic_vector(2 downto 0);
+	mux_before_pc_cs:out std_logic_vector(1 downto 0);
+	mux_before_zeroreg_cs:out std_logic;
+	
+	LMSM_cs :out std_logic_vector(1 downto 0);
+	imm6: out std_logic;
+	ALU_Op: out std_logic_vector(1 downto 0);
+	nextState: out std_logic_vector(4 downto 0));
+end entity;
+
+architecture Controller_arc of Controller is 
+begin
+	process(state, opcode, c, z, cz)
+	begin
+		case state is
+			when "00000" => -- State 0
+				AReg_write <= '0';
+				BReg_write	<= '0';
+				MDR_write	<= '0';
+				M_write		<= '0';
+				pc_write 	<= '0';
+				RF_write		<= '0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				IR_write		<= '1';
+				ALUReg_write	<= '1';
+				mux_before_RFD3_cs	<= "0000";
+				mux_before_RFA3_cs		<= "00";
+				mux_before_RFA1_cs		<= "00";
+				mux_before_RFA2_cs		<= "00";
+				mux_before_MEMA1_cs		<= "00";
+				mux_before_ALUB_cs	<= "100";
+				mux_before_ALUA_cs	<= "100";
+				mux_before_pc_cs		<="00";
+				mux_before_zeroreg_cs		<='0';
+				LMSM_cs <= "00";
+				
+				imm6		<= '0';
+				ALU_Op	<= "00";
+				nextState <= "00001"; -- ALL
+				
+				
+			when "00001" => -- State 1 
+				IR_write		<= '0';
+				ALUReg_write	<= '0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				mux_before_zeroreg_cs		<='0';
+				pc_write 	<= '1';
+				mux_before_pc_cs		<="10";
+				if ((opcode = "0001" AND (cz = "00" OR (cz = "01" AND z = '1') OR (cz = "10" AND c = '1') OR cz = "11")) OR opcode = "0000" OR (opcode = "0010" AND (cz = "00" OR (cz = "10" AND c = '1') OR (cz = "01" AND z = '1'))) OR opcode = "0101" OR opcode = "0111" OR opcode = "1000") then
+
+					nextState <= "00010"; -- ADD, ADC, ADZ, ADL, ADI, NDU, NDC, NDZ, LW, SW, BEQ => 2 
+				elsif opcode = "0011" then
+					nextState <= "00100"; -- LHI => 4 and not 9 
+				elsif opcode = "1101" OR opcode = "1100" then
+					nextState <= "01011"; -- LM, SM => 9
+				elsif opcode = "1001" then
+					nextState <= "01110"; -- JAL => 14
+				elsif opcode = "1010" then
+					nextState <= "10000"; -- JLR => 16
+				elsif opcode = "1011" then
+					nextState <= "10010"; -- JRI => 18
+				else
+					nextState <= "10100"; -- Skip => 0
+				end if;
+				
+				
+			when "00010" => -- State 2
+				pc_write 	<= '0';
+				mux_before_zeroreg_cs		<='0';
+				AReg_write <= '1';
+				BReg_write	<= '1';
+				mux_before_RFA1_cs		<= "01";
+				mux_before_RFA2_cs		<= "01";
+				if(opcode = "0001") then
+					nextState <= "00101"; -- ADL => 5
+				elsif (opcode = "0000" OR opcode = "0101" OR opcode = "0111") then
+					nextState <= "00110"; -- LW, SW, ADI => 6
+				else
+					
+					nextState <= "00011"; -- ADD, ADC, ADZ, NDU, NDC, NDZ, BEQ => 3
+				end if;
+				
+				
+				
+			when "00011" => -- State 3
+				AReg_write <= '0';
+				BReg_write	<= '0';
+				mux_before_zeroreg_cs		<='0';
+				ALUReg_write	<= '1';
+				mux_before_ALUA_cs <= "000"; 
+				mux_before_ALUB_cs	<= "000";
+				
+				if(opcode = "1000") then
+					carry_write		<= '0';
+					zero_write		<= '0';
+					ALU_Op	<= "01";
+					nextState <= "01010"; -- BEQ => 10
+					
+				else 
+					if(opcode = "0001") then
+						carry_write		<= '1';
+						zero_write		<= '1';
+					elsif(opcode = "0010") then
+						carry_write		<= '1';
+						zero_write		<= '0';
+					end if;	
+					ALU_Op	<= "10";
+					nextState <= "00100"; -- ADD, ADC, ADZ, NDU, NDC, NDZ=> 4
+				end if;
+				
+				
+			when "00100" => -- State 4
+				carry_write		<= '0';
+				zero_write		<= '0';
+				imm6		<= '0';
+				mux_before_zeroreg_cs		<='0';
+				pc_write 	<= '0';
+				BReg_write	<= '0';
+				ALUReg_write	<= '0';
+				MDR_write	<= '0';
+				mux_before_MEMA1_cs		<= "00";
+				RF_write		<= '1';
+				if(opcode = "0101") then
+					mux_before_RFD3_cs	<= "0001";
+				elsif	(opcode = "0011") then
+					mux_before_RFD3_cs	<= "0010";
+				else 
+					mux_before_RFD3_cs	<= "0000";
+				end if;
+				mux_before_RFA3_cs		<= "00";
+				nextState <= "10100"; -- ALL => 20
+				
+				
+			when "00101" => -- State 5
+			
+				AReg_write <= '0';
+				BReg_write	<= '0';
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '1';
+				zero_write		<= '1';
+				ALUReg_write	<= '1';
+				mux_before_ALUA_cs <= "000";
+				mux_before_ALUB_cs	<= "010";
+				nextState <= "00100"; -- ADL => 4
+				
+				
+			when "00110" => -- State 6
+				AReg_write <= '0';
+				BReg_write	<= '1';
+				mux_before_zeroreg_cs		<='0';
+				ALUReg_write	<= '1';
+				imm6		<= '1';
+				mux_before_RFA2_cs		<= "10";
+				mux_before_ALUA_cs <= "000"; 
+				mux_before_ALUB_cs	<= "001";
+				if (opcode = "0101") then
+					carry_write		<= '0';
+					zero_write		<= '0';
+					nextState <= "00111"; -- LW => 7
+				elsif (opcode = "0111") then
+					carry_write		<= '0';
+					zero_write		<= '0';
+					nextState <= "01000"; -- SW => 8
+				else
+					carry_write		<= '1';
+					zero_write		<= '1';
+					nextState <= "00100"; -- ADI => 4
+				end if;
+				
+				
+			when "00111" => -- State 7
+				ALUReg_write	<= '0';
+				mux_before_zeroreg_cs		<='1';
+				carry_write		<= '0';
+				zero_write		<= '1';
+				imm6		<= '0';
+				BReg_write	<= '0';
+				MDR_write	<= '1';
+				mux_before_MEMA1_cs		<= "10";
+				nextState <= "00100"; -- LW => 4
+				
+			when "01000" => -- State 8
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				ALUReg_write	<= '0';
+				imm6		<= '0';
+				BReg_write	<= '0';
+				M_write		<= '1';
+				mux_before_MEMA1_cs		<= "10";
+				
+				nextState <= "10100"; -- SW => 20
+				
+				
+			when "01001" => -- State 9
+			mux_before_zeroreg_cs		<='0';
+			carry_write		<= '0';
+			zero_write		<= '0';
+			pc_write 	<= '0';
+			BReg_write <= '1';
+			mux_before_RFA2_cs		<= "10";
+			LMSM_cs <= "11";
+			nextState <= "01011"; -- LM, SM => 11
+			
+				
+				
+			when "01010" => -- State 10
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				nextState <= "10100"; -- BEQ => 20
+				if(z='1') then
+					pc_write 	<= '1';
+					imm6		<= '1';
+					mux_before_ALUA_cs <= "100";
+					mux_before_ALUB_cs	<= "001";
+					mux_before_pc_cs		<="01";
+				end if;
+				
+
+			when "01011" => -- State 11
+			mux_before_zeroreg_cs		<='0';
+			carry_write		<= '0';
+			zero_write		<= '0';
+			AReg_write <= '0';
+			LMSM_cs <= "10";
+			if(ins_7to0(7 - to_integer(unsigned(Reg_ADD(2 downto 0)))) = '1') then
+				if(opcode = "1101") then
+					mux_before_MEMA1_cs		<= "01";
+					MDR_write	<= '1';
+					nextState <= "01100"; -- LM, SM => 12
+				elsif (opcode = "1100") then
+					mux_before_RFA2_cs		<= "00";
+					BReg_write	<= '1';
+					nextState <= "01100";	-- LM, SM => 12
+				end if;
+			else
+				nextState <= "01101"; -- LM, SM => 13
+			end if ;
+		
+		
+			when "01100" => -- State 12
+			mux_before_zeroreg_cs		<='0';
+			carry_write		<= '0';
+			zero_write		<= '0';
+			if(opcode = "1101") then
+				MDR_write	<= '0';
+				LMSM_cs <= "01";
+				RF_write		<= '1';
+				mux_before_RFD3_cs	<= "0001";
+				mux_before_RFA3_cs		<= "01";
+				nextState <= "01101"; -- LM, SM => 13
+			elsif (opcode = "1100") then
+				BReg_write	<= '0';
+				M_write		<= '1';
+				mux_before_MEMA1_cs <= "01";
+			end if;	
+				
+				
+			when "01101" => -- State 13
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				LMSM_cs <= "00";
+				if (Reg_ADD="111") then
+					nextState <= "10100"; -- LM, SM => 20
+				else
+					LMSM_cs <= "00";
+					nextState <= "01011"; -- LM, SM => 11
+				end if;
+				
+				
+			when "01110" => -- State 14
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				pc_write 	<= '0';
+				ALUReg_write	<= '1';
+				RF_write		<= '1';
+				mux_before_RFD3_cs	<= "1000";
+				mux_before_RFA3_cs		<= "00";
+				imm6 <= '0';
+				mux_before_ALUA_cs <= "100"; 
+				mux_before_ALUB_cs	<= "001";
+				nextState <= "01111"; -- JAL => 15
+				
+				
+			when "01111" => -- State 15
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				ALUReg_write	<= '0';
+				RF_write		<= '0';
+				pc_write 	<= '1';
+				mux_before_pc_cs		<="10";
+				nextState <= "10100"; -- JAL => 20
+				
+				
+			when "10000" => -- State 16
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				pc_write 	<= '0';
+				AReg_write	<= '1';
+				RF_write		<= '1';
+				mux_before_RFD3_cs	<= "1000";
+				mux_before_RFA3_cs		<= "00";
+				mux_before_RFA1_cs		<= "01";
+				nextState <= "10001"; -- JLR => 17
+				
+				
+			when "10001" => -- State 17
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				AReg_write	<= '0';
+				RF_write		<= '0';
+				pc_write 	<= '1';
+				mux_before_pc_cs		<="00";
+				nextState <= "10100"; -- JLR => 20
+				
+				
+			when "10010" => -- State 18
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				pc_write 	<= '0';
+				AReg_write	<= '1';
+				mux_before_RFA1_cs		<= "10";
+				nextState <= "10011"; -- JRI => 19
+				
+				
+			when "10011" => -- State 19
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				AReg_write	<= '0';
+				pc_write 	<= '1';
+				imm6 <= '0';
+				mux_before_ALUA_cs <= "000"; 
+				mux_before_ALUB_cs	<= "001";
+				mux_before_pc_cs		<="01";
+				nextState <= "10100"; -- JRI => 20
+				
+				
+			when "10100" => -- State 20
+				mux_before_zeroreg_cs		<='0';
+				carry_write		<= '0';
+				zero_write		<= '0';
+				imm6		<= '0';
+				pc_write 	<= '0';
+				M_write		<= '0';
+				RF_write		<= '1';
+				mux_before_RFD3_cs	<= "1000";
+				mux_before_RFA3_cs		<= "10";
+				nextState <= "00000"; -- ALL => 0
+
+			when "11111" => -- Reset State 
+				AReg_write <= '0';
+				BReg_write	<= '0';
+				IR_write	<= '0';
+				MDR_write	<= '0';
+				M_write	<= '0';
+				ALUReg_write	<= '0';
+				pc_write 	<= '0';
+				carry_write	<= '0';
+				zero_write 	<= '0';
+				RF_write 	<= '0';
+			
+				mux_before_RFD3_cs <= "1000";
+				mux_before_RFA3_cs	<= "00";
+				mux_before_RFA1_cs	<= "01";
+				mux_before_RFA2_cs	<= "01";
+				mux_before_MEMA1_cs	<= "00";
+				mux_before_ALUB_cs <= "000";
+				mux_before_ALUA_cs <= "000";
+				mux_before_pc_cs <= "00";
+				mux_before_zeroreg_cs	<= '0';
+				
+				LMSM_cs  <= "00";
+				imm6	<= '0';
+				ALU_Op	<= "00";
+				nextState <= "00000"; -- ALL => 0
+			when others  => 
+				nextState <= "00000"; -- Skip => 0
+		end case;
+	end process;
+end architecture;

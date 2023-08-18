@@ -1,0 +1,59 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity Next_instruction is
+	port(clk,rst:in std_logic;
+        change_instruction:in std_logic;
+        add_branch:in std_logic;
+        branch_from: in std_logic_vector(15 downto 0);
+        branch_to:in std_logic_vector(15 downto 0);
+        branch_taken:in std_logic;
+        insadd_out:out std_logic_vector(15 downto 0);
+end entity;
+
+architecture Sign_extend_arc of Sign_extend is
+    type addr is array(3000 downto 0) of std_logic_vector(15 downto 0);
+	signal b_from: addr:= (x"0000",others => x"0000");
+    signal b_to: addr:= (x"0000",others => x"0000");
+    signal prev_state <= std_logic_vector(3000 downto 0);
+    signal total_count: integer := 0;
+    signal curr_ins_add:std_logic_vector(15 downto 0);
+    signal curr_ins_presentinstorage:std_logic;
+    signal curr_ins_branchto:std_logic_vector(15 downto 0);
+    signal curr_ins_prev_state:std_logic;
+begin
+    insadd_out <= curr_ins_add;
+    process (clk)
+    begin
+        if(rising_edge(clk)) then
+            if(rst = '1') then
+              
+            else
+                if(change_instruction = '1') then
+                    curr_ins_presentinstorage <= '0';
+                    if(curr_ins_presentinstorage = '1') then
+                        if(curr_ins_prev_state = '1') then
+                            curr_ins_add <= curr_ins_branchto;
+                        else 
+                            curr_ins_add <= curr_ins_add +1;
+                        end if;
+                    else 
+                            curr_ins_add <= curr_ins_add +1;
+                    end if;
+                    
+            end if;
+    end process;
+
+	process(curr_ins_add)
+    begin
+        search:
+        for i in 0 to total_count-1 generate
+		    if(b_from(i)= curr_ins_add) then
+                curr_ins_presentinstorage <= '1';
+                curr_ins_branchto <= b_to(i);
+                curr_ins_prev_state <= prev_state(i);
+            end if;   
+	    end generate;
+    end process
+end architecture;
